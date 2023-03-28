@@ -32,4 +32,122 @@ Clone  https://learn.microsoft.com/ko-kr/aspnet/core/blazor/tutorials/signalr-bl
       }
   }
   
-4. 
+4. 서비스 및 SignalR 허브에 대한 엔드포인트 추가
+    - Program.cs
+    
+    - using Microsoft.AspNetCore.ResponseCompression;
+      using BlazorServerSignalRApp.Server.Hubs;
+  
+    - builder.Services.AddRazorPages();
+      builder.Services.AddServerSideBlazor();
+      builder.Services.AddSingleton<WeatherForecastService>();
+      builder.Services.AddResponseCompression(opts =>
+      {
+        opts.MimeTypes = ResponseCompressionDefaults.MimeTypes.Concat(
+            new[] { "application/octet-stream" });
+      });
+
+   -  builder.Services.AddRazorPages();
+      builder.Services.AddServerSideBlazor();
+      builder.Services.AddSingleton<WeatherForecastService>();
+      builder.Services.AddResponseCompression(opts =>
+      {
+          opts.MimeTypes = ResponseCompressionDefaults.MimeTypes.Concat(
+              new[] { "application/octet-stream" });
+      });
+      
+    - app.UseResponseCompression();
+
+      if (!app.Environment.IsDevelopment())
+      {
+          app.UseExceptionHandler("/Error");
+          app.UseHsts();
+      }
+
+      app.UseHttpsRedirection();
+
+      app.UseStaticFiles();
+
+      app.UseRouting();
+
+      app.MapBlazorHub();
+      app.MapHub<ChatHub>("/chathub");
+      app.MapFallbackToPage("/_Host");
+
+      app.Run();      
+      
+      
+      
+      - Pages/Index.razor
+      
+       - @page "/"
+         @using Microsoft.AspNetCore.SignalR.Client
+         @inject NavigationManager Navigation
+         @implements IAsyncDisposable
+
+         <PageTitle>Index</PageTitle>
+
+         <div class="form-group">
+             <label>
+                 User:
+                 <input @bind="userInput" />
+             </label>
+         </div>
+         <div class="form-group">
+             <label>
+                 Message:
+                 <input @bind="messageInput" size="50" />
+             </label>
+         </div>
+         <button @onclick="Send" disabled="@(!IsConnected)">Send</button>
+
+         <hr>
+
+         <ul id="messagesList">
+             @foreach (var message in messages)
+             {
+                 <li>@message</li>
+             }
+         </ul>
+
+         @code {
+             private HubConnection? hubConnection;
+             private List<string> messages = new List<string>();
+             private string? userInput;
+             private string? messageInput;
+
+             protected override async Task OnInitializedAsync()
+             {
+                 hubConnection = new HubConnectionBuilder()
+                     .WithUrl(Navigation.ToAbsoluteUri("/chathub"))
+                     .Build();
+
+                 hubConnection.On<string, string>("ReceiveMessage", (user, message) =>
+                 {
+                     var encodedMsg = $"{user}: {message}";
+                     messages.Add(encodedMsg);
+                     InvokeAsync(StateHasChanged);
+                 });
+
+                 await hubConnection.StartAsync();
+             }
+
+             private async Task Send()
+             {
+                 if (hubConnection is not null)
+                     {
+                         await hubConnection.SendAsync("SendMessage", userInput, messageInput);
+                     }
+             }
+
+             public bool IsConnected =>
+                 hubConnection?.State == HubConnectionState.Connected;
+
+             public async ValueTask DisposeAsync()
+             {
+                 if (hubConnection is not null)
+                 {
+                     await hubConnection.DisposeAsync();
+                 }
+             }
+         }      
